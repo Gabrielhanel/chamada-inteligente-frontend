@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chamada Inteligente</title>
+  <link rel="stylesheet" href="assets/css/main.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Topbar (oculta no login) ───────────────────────── -->
+  <header class="topbar" id="topbar" style="display:none;">
+    <div class="topbar-logo">
+      <span class="dot"></span>
+      Chamada Inteligente
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-user">
+      <span id="topbar-name"></span>
+      <span class="topbar-badge" id="topbar-badge"></span>
+    </div>
+    <button class="btn-logout" id="btn-logout">Sair</button>
+  </header>
+
+  <!-- ── Página: Login ─────────────────────────────────── -->
+  <div class="page active" id="page-login">
+    <div class="login-wrap">
+      <div class="login-box">
+
+        <div class="login-header">
+          <div class="login-logo">📡 Chamada<span>.</span></div>
+          <div class="login-sub">Sistema inteligente de presença via RFID</div>
+        </div>
+
+        <div class="card">
+          <form id="login-form" novalidate style="display:flex;flex-direction:column;gap:16px;">
+            <div class="form-group">
+              <label class="form-label" for="login-email">E-mail</label>
+              <input
+                type="email"
+                id="login-email"
+                class="form-input"
+                placeholder="seu@escola.edu.br"
+                autocomplete="email"
+                required
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="login-password">Senha</label>
+              <input
+                type="password"
+                id="login-password"
+                class="form-input"
+                placeholder="••••••••"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+            <span class="form-error" id="login-error" style="display:none;"></span>
+            <button type="submit" class="btn btn-primary btn-full" id="btn-login">
+              Entrar
+            </button>
+          </form>
+        </div>
+
+        <!-- Atalhos de demo -->
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <p style="font-size:.72rem;text-align:center;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;">
+            Acesso rápido (demo)
+          </p>
+          <div style="display:flex;gap:8px;">
+            <button
+              class="btn btn-secondary btn-sm"
+              style="flex:1;justify-content:center;"
+              data-demo-login="carlos@escola.edu.br:prof123"
+            >
+              👨‍🏫 Professor
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              style="flex:1;justify-content:center;"
+              data-demo-login="ana@escola.edu.br:aluno123"
+            >
+              🎓 Aluno
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Página: Professor ─────────────────────────────── -->
+  <div class="page" id="page-professor">
+    <!-- Preenchido dinamicamente por professor.js -->
+    <div class="main-content">
+      <div class="empty-state">
+        <div class="empty-state-icon">⏳</div>
+        <div class="empty-state-msg">Carregando dashboard…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Página: Aluno ──────────────────────────────────── -->
+  <div class="page" id="page-aluno">
+    <!-- Preenchido dinamicamente por aluno.js -->
+  </div>
+
+</div><!-- /#app -->
+
+<!-- Toast container (global) -->
+<div id="toast-container"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
