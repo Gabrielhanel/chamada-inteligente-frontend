@@ -4,7 +4,7 @@
 // Para produção: trocar BASE_URL e remover _mockDb.
 // ============================================================
 
-const BASE_URL = 'http://localhost:5000'; // trocar para URL real do Flask
+const BASE_URL = 'http://localhost:3000'; // trocar para URL real do Flask
 
 // ── Mock in-memory (substitui chamadas HTTP durante dev) ────
 
