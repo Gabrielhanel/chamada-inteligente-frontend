@@ -281,9 +281,9 @@ function openAddStudentModal() {
   const txtScanner = modal.querySelector('#tag-scanner-text');
   const inputUid   = modal.querySelector('#new-student-uid');
 
-  let wsConnection = null;
+  let pollInterval = null;
 
-  // Ao clicar na área do scanner, ativa o modo cadastro e abre o WebSocket
+  // Ao clicar na área do scanner, ativa o modo cadastro e checa o status
   scanner.addEventListener('click', async (e) => {
     if (e.target === inputUid) return;
 
@@ -295,16 +295,22 @@ function openAddStudentModal() {
       txtScanner.textContent    = '⏳ Arduino em MODO CADASTRO — aproxime a tag do sensor…';
       scanner.style.borderColor = 'var(--accent)';
 
-      // Abre WebSocket para receber o UID assim que o Arduino ler a tag
-      if (wsConnection) wsConnection.close();
-      wsConnection = API.connectWebSocket(({ uid }) => {
-        inputUid.value            = uid;
-        inputUid.readOnly         = false;
-        txtScanner.textContent    = `✅ Tag lida: ${uid}`;
-        scanner.style.borderColor = 'var(--green)';
-        wsConnection.close();
-        wsConnection = null;
-      });
+      if (pollInterval) clearInterval(pollInterval);
+      
+      pollInterval = setInterval(async () => {
+        try {
+          const status = await API.getCadastroStatus();
+          if (status && status.uid) {
+            inputUid.value            = status.uid;
+            inputUid.readOnly         = false;
+            txtScanner.textContent    = `✅ Tag lida: ${status.uid}`;
+            scanner.style.borderColor = 'var(--green)';
+            clearInterval(pollInterval);
+          }
+        } catch (pollingErr) {
+          console.error("Erro ao checar status da tag:", pollingErr);
+        }
+      }, 1500);
 
     } catch (err) {
       txtScanner.textContent    = 'Erro ao conectar com o Arduino.';
@@ -313,9 +319,9 @@ function openAddStudentModal() {
     }
   });
 
-  // Fecha o WebSocket se o modal for fechado sem salvar
+  // Fecha o intervalo se o modal for fechado sem salvar
   modal.querySelector('[data-close]')?.addEventListener('click', () => {
-    wsConnection?.close();
+    if (pollInterval) clearInterval(pollInterval);
   });
 
   modal.querySelector('#btn-save-student').addEventListener('click', async () => {
@@ -327,7 +333,7 @@ function openAddStudentModal() {
 
     let valid = true;
     if (!name) { showError(modal, 'err-name', 'Nome é obrigatório.');        valid = false; }
-    if (!uid)  { showError(modal, 'err-tag',  'UID da tag é obrigatório.');   valid = false; }
+    if (!uid)  { showError(modal, 'err-tag',  'UID da tag é obrigatório.');  valid = false; }
     if (!valid) return;
 
     const btn = modal.querySelector('#btn-save-student');
@@ -339,7 +345,7 @@ function openAddStudentModal() {
       const { students } = Store.getState();
       Store.setState({ students: [...students, novoAluno] });
 
-      wsConnection?.close();
+      if (pollInterval) clearInterval(pollInterval);
       closeModal('modal-add-student');
       renderStudentList();
       renderStats();

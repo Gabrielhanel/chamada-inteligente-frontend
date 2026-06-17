@@ -191,7 +191,6 @@ export async function simulateTagRead() {
 
 export async function waitForNewTag() {
   await _delay(1500);
-  // Gera um ID de tag novo (não cadastrado) — simula novo cartão
   const chars = '0123456789ABCDEF';
   let tag = '';
   for (let i = 0; i < 8; i++) tag += chars[Math.floor(Math.random() * chars.length)];
