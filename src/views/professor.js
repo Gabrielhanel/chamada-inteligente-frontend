@@ -1,15 +1,12 @@
-// ============================================================
-// views/professor.js — Dashboard do Professor
-// ============================================================
-
 import * as API from '../api/api.js';
 import Store from '../store/store.js';
-import { showToast, openModal, closeModal, createModal, setButtonLoading, createAutocomplete, initTabs, confirmAction } from '../components/components.js';
-import { computeCurrentSlot, buildAttendanceMatrix, getAbsentStudents, formatTime, formatDate } from '../utils/utils.js';
+import {
+  showToast, openModal, closeModal, createModal,
+  setButtonLoading, createAutocomplete, initTabs, confirmAction
+} from '../components/components.js';
+import { formatTime, formatDate } from '../utils/utils.js';
 
-let _tickInterval   = null;
-let _refreshTimeout = null;
-let _acInstance     = null;  // autocomplete instance
+let _tickInterval = null;
 
 // ── Entry point ───────────────────────────────────────────────
 
@@ -28,12 +25,11 @@ export async function initProfessorView() {
 async function loadData() {
   Store.setState({ isLoading: true });
   try {
-    const [students, attendances, settings] = await Promise.all([
+    const [students, attendances] = await Promise.all([
       API.getStudents(),
       API.getAttendances(),
-      API.getSettings(),
     ]);
-    Store.setState({ students, attendances, settings });
+    Store.setState({ students, attendances });
   } catch (e) {
     showToast(`Erro ao carregar dados: ${e.message}`, 'error');
   } finally {
@@ -41,14 +37,13 @@ async function loadData() {
   }
 }
 
-// ── Tick engine (atualiza a cada segundo) ─────────────────────
+// ── Tick engine ───────────────────────────────────────────────
 
 function startTick() {
   stopTick();
   _tickInterval = setInterval(() => {
-    renderSlotTimeline();
+    renderAttendanceTable();
     renderStats();
-    checkSlotTransition();
   }, 1000);
 }
 
@@ -56,112 +51,29 @@ function stopTick() {
   if (_tickInterval) clearInterval(_tickInterval);
 }
 
-let _lastSlot = -1;
-function checkSlotTransition() {
-  const { settings } = Store.getState();
-  if (!settings.sessionStartTime) return;
-  const { slotIndex, finished } = computeCurrentSlot(
-    settings.sessionStartTime,
-    settings.slotDurationSeconds,
-    settings.totalSlots
-  );
-  if (slotIndex !== _lastSlot) {
-    _lastSlot = slotIndex;
-    if (!finished) {
-      showToast(`🔔 Faixa ${slotIndex + 1} de ${settings.totalSlots} iniciada!`, 'info');
-      refreshAttendances();
-    } else {
-      showToast('✅ Sessão encerrada! Todas as faixas foram concluídas.', 'success', 5000);
-      stopTick();
-    }
-  }
-}
-
-async function refreshAttendances() {
-  const attendances = await API.getAttendances();
-  Store.setState({ attendances });
-  renderAttendanceTable();
-  renderStats();
-}
-
 // ── Render helpers ────────────────────────────────────────────
 
 function renderAll() {
-  renderSlotTimeline();
   renderAttendanceTable();
   renderStats();
   renderStudentList();
 }
 
 function renderStats() {
-  const { students, attendances, settings } = Store.getState();
-  if (!settings.sessionStartTime) return;
+  const { students, attendances } = Store.getState();
 
-  const { slotIndex, finished } = computeCurrentSlot(
-    settings.sessionStartTime,
-    settings.slotDurationSeconds,
-    settings.totalSlots
-  );
-  const today = new Date().toISOString().split('T')[0];
-  const todayAtt = attendances.filter(a => a.date === today);
-  const currentSlotAtt = todayAtt.filter(a => a.slotIndex === slotIndex);
-  const presentToday = new Set(todayAtt.map(a => a.studentId)).size;
+  const totalAlunos   = students.length;
+  const presentesHoje = new Set(attendances.filter(a => a.faltas < 4).map(a => a.uid)).size;
+  const ausentesHoje  = totalAlunos - presentesHoje;
 
-  setEl('stat-total',    students.length);
-  setEl('stat-present',  presentToday);
-  setEl('stat-absent',   students.length - presentToday);
-  setEl('stat-slot-att', `${currentSlotAtt.length}/${students.length}`);
-}
-
-function renderSlotTimeline() {
-  const { settings } = Store.getState();
-  const timeline = document.getElementById('slot-timeline');
-  if (!timeline || !settings.sessionStartTime) return;
-
-  const { slotIndex, secondsLeft, finished } = computeCurrentSlot(
-    settings.sessionStartTime,
-    settings.slotDurationSeconds,
-    settings.totalSlots
-  );
-
-  let html = '';
-  for (let i = 0; i < settings.totalSlots; i++) {
-    let stateClass = 'upcoming';
-    let statusText = 'Aguardando';
-    let timerHtml  = '';
-
-    if (finished || i < slotIndex) {
-      stateClass = 'done';
-      statusText = 'Encerrada';
-    } else if (i === slotIndex && !finished) {
-      stateClass = 'active';
-      const pct = ((settings.slotDurationSeconds - secondsLeft) / settings.slotDurationSeconds) * 100;
-      const circ = 2 * Math.PI * 10; // r=10
-      const dash = circ * (pct / 100);
-      statusText = `${secondsLeft}s restantes`;
-      timerHtml = `
-        <svg class="timer-ring" viewBox="0 0 24 24">
-          <circle class="track" cx="12" cy="12" r="10"/>
-          <circle class="fill" cx="12" cy="12" r="10"
-            stroke-dasharray="${circ}"
-            stroke-dashoffset="${circ - dash}"
-            transform="rotate(-90 12 12)"/>
-        </svg>`;
-    }
-
-    html += `
-      <div class="slot-card ${stateClass}">
-        ${timerHtml}
-        <div class="slot-num">Faixa ${i + 1}</div>
-        <div class="slot-label">${String(i + 1).padStart(2,'0')}</div>
-        <div class="slot-status">${statusText}</div>
-      </div>`;
-  }
-  timeline.innerHTML = html;
+  setEl('stat-total',    totalAlunos);
+  setEl('stat-present',  presentesHoje);
+  setEl('stat-absent',   ausentesHoje);
+  setEl('stat-slot-att', attendances.length);
 }
 
 function renderAttendanceTable() {
-  const { students, attendances, settings } = Store.getState();
+  const { students, attendances } = Store.getState();
   const tbody = document.getElementById('att-tbody');
   if (!tbody) return;
 
@@ -170,39 +82,32 @@ function renderAttendanceTable() {
     return;
   }
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayAtt = attendances.filter(a => a.date === today);
-  const { slotIndex, finished } = settings.sessionStartTime
-    ? computeCurrentSlot(settings.sessionStartTime, settings.slotDurationSeconds, settings.totalSlots)
-    : { slotIndex: 0, finished: false };
+  tbody.innerHTML = students.map(student => {
+    const presenca = attendances.find(a => a.uid === student.uid);
 
-  const matrix = buildAttendanceMatrix(students, todayAtt, settings.totalSlots);
+    let statusHtml    = '';
+    let fatiasPresenca = '';
 
-  tbody.innerHTML = matrix.map(({ student, slots, presentCount }) => {
-    const chips = slots.map((s, i) => {
-      let cls, label, tip;
-      if (s.present) {
-        cls = 'present'; label = '✓';
-        tip = `${i < slotIndex || finished ? '' : ''}${formatTime(s.timestamp)} • ${s.method === 'rfid' ? 'RFID' : 'Manual'}`;
-      } else if (i < slotIndex || finished) {
-        cls = 'absent'; label = '✕'; tip = 'Ausente';
-      } else if (i === slotIndex && !finished) {
-        cls = 'pending'; label = '…'; tip = 'Em andamento';
-      } else {
-        cls = 'future'; label = '—'; tip = 'Faixa futura';
-      }
-      return `<span class="chip ${cls}" data-tip="${tip}">${label}</span>`;
-    }).join('');
+    if (presenca) {
+      const corStatus = presenca.status === 'PRESENTE' ? 'var(--green)' : 'var(--yellow)';
+      statusHtml = `<span class="badge" style="background:${corStatus};color:#fff;padding:2px 6px;border-radius:4px;">${presenca.status}</span>`;
 
-    const pct = Math.round((presentCount / settings.totalSlots) * 100);
-    const pctColor = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+      const presencasRestantes = 4 - presenca.faltas;
+      fatiasPresenca = `
+        ${'<span class="chip present" data-tip="Presente">✓</span>'.repeat(presencasRestantes)}
+        ${'<span class="chip absent"  data-tip="Falta">✕</span>'.repeat(presenca.faltas)}
+      `;
+    } else {
+      statusHtml     = `<span class="badge" style="background:var(--red);color:#fff;padding:2px 6px;border-radius:4px;">AUSENTE</span>`;
+      fatiasPresenca = '<span class="chip future" data-tip="Sem registros">—</span>'.repeat(4);
+    }
 
     return `
       <tr>
         <td><span class="student-name">${student.name}</span></td>
-        <td><span class="tag-id">${student.tagId}</span></td>
-        <td><div class="slot-chips">${chips}</div></td>
-        <td style="color:${pctColor};font-weight:600;">${presentCount}/${settings.totalSlots}</td>
+        <td><span class="tag-id">${student.uid}</span></td>
+        <td><div class="slot-chips">${fatiasPresenca}</div></td>
+        <td>${statusHtml}</td>
       </tr>`;
   }).join('');
 }
@@ -220,16 +125,13 @@ function renderStudentList() {
   list.innerHTML = students.map(s => `
     <tr>
       <td><span class="student-name">${s.name}</span></td>
-      <td><span class="tag-id">${s.tagId}</span></td>
+      <td><span class="tag-id">${s.uid}</span></td>
       <td>
-        <button class="btn btn-danger btn-sm" data-delete="${s.id}" title="Remover aluno">
-          🗑
-        </button>
+        <button class="btn btn-danger btn-sm" data-delete="${s.id}" title="Remover aluno">🗑</button>
       </td>
     </tr>
   `).join('');
 
-  // Bind delete buttons
   list.querySelectorAll('[data-delete]').forEach(btn => {
     btn.addEventListener('click', () => handleDeleteStudent(btn.dataset.delete));
   });
@@ -238,17 +140,9 @@ function renderStudentList() {
 // ── Actions ───────────────────────────────────────────────────
 
 function bindActions() {
-  // Iniciar / Resetar sessão
-  document.getElementById('btn-start-session')?.addEventListener('click', handleStartSession);
-  document.getElementById('btn-reset-session')?.addEventListener('click', handleResetSession);
-
-  // Cadastro manual de presença
   document.getElementById('btn-manual-att')?.addEventListener('click', openManualAttModal);
-
-  // Cadastro de aluno
   document.getElementById('btn-add-student')?.addEventListener('click', openAddStudentModal);
 
-  // Refresh
   document.getElementById('btn-refresh')?.addEventListener('click', async () => {
     await loadData();
     renderAll();
@@ -256,46 +150,14 @@ function bindActions() {
   });
 }
 
-async function handleStartSession() {
-  const btn = document.getElementById('btn-start-session');
-  setButtonLoading(btn, true);
-  try {
-    const settings = await API.startSession();
-    Store.setState({ settings });
-    _lastSlot = -1;
-    startTick();
-    renderAll();
-    showToast('Sessão iniciada! Faixa 1 em andamento.', 'success');
-  } catch (e) {
-    showToast(e.message, 'error');
-  } finally {
-    setButtonLoading(btn, false);
-  }
-}
-
-async function handleResetSession() {
-  const ok = await confirmAction('Isso irá apagar todas as presenças de hoje e reiniciar o timer. Continuar?');
-  if (!ok) return;
-  try {
-    const settings = await API.resetSession();
-    Store.setState({ settings, attendances: [] });
-    _lastSlot = -1;
-    startTick();
-    renderAll();
-    showToast('Sessão reiniciada.', 'info');
-  } catch (e) {
-    showToast(e.message, 'error');
-  }
-}
-
 async function handleDeleteStudent(studentId) {
   const { students } = Store.getState();
-  const s = students.find(x => x.id === studentId);
-  const ok = await confirmAction(`Remover <b>${s?.name}</b>? As presenças do aluno serão mantidas.`);
+  const s  = students.find(x => x.id == studentId);
+  const ok = await confirmAction(`Remover <b>${s?.name}</b>?`);
   if (!ok) return;
   try {
     await API.deleteStudent(studentId);
-    Store.setState({ students: students.filter(x => x.id !== studentId) });
+    Store.setState({ students: students.filter(x => x.id != studentId) });
     renderStudentList();
     renderStats();
     showToast('Aluno removido.', 'success');
@@ -307,42 +169,26 @@ async function handleDeleteStudent(studentId) {
 // ── Modal: Presença Manual ────────────────────────────────────
 
 function openManualAttModal() {
-  const { settings, students, attendances } = Store.getState();
-  if (!settings.sessionStartTime) {
-    showToast('Inicie a sessão primeiro.', 'warn');
-    return;
-  }
-  const { slotIndex, finished } = computeCurrentSlot(
-    settings.sessionStartTime, settings.slotDurationSeconds, settings.totalSlots
-  );
-  if (finished) {
-    showToast('A sessão já foi encerrada.', 'warn');
-    return;
-  }
+  const { students, attendances } = Store.getState();
 
-  const today = new Date().toISOString().split('T')[0];
-  const absent = getAbsentStudents(students, attendances, slotIndex);
+  // Apenas alunos sem presença registrada hoje
+  const absent = students.filter(s => !attendances.some(a => a.uid === s.uid));
 
   const modal = createModal({
     id: 'modal-manual-att',
     title: '📝 Registrar presença manual',
     bodyHtml: `
-      <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:16px;">
-        Faixa <strong style="color:var(--accent)">${slotIndex + 1}</strong> em andamento •
-        Data: <strong>${formatDate(today)}</strong>
-      </p>
       <div class="form-group">
         <label class="form-label">Buscar aluno ausente</label>
         <div class="autocomplete-wrap">
           <input type="text" id="manual-att-search" class="form-input" placeholder="Digite o nome do aluno…" autocomplete="off"/>
           <div id="manual-att-list" class="autocomplete-list"></div>
         </div>
-        <span class="form-hint">Apenas alunos que ainda não registraram presença nesta faixa são listados.</span>
       </div>
       <div id="manual-att-selected" style="display:none;margin-top:16px;" class="card card-sm">
         <div style="font-size:.78rem;color:var(--text-muted);">Aluno selecionado</div>
         <div id="manual-att-name" style="font-weight:600;margin-top:4px;"></div>
-        <div id="manual-att-tag" style="margin-top:4px;"></div>
+        <div id="manual-att-tag"  style="margin-top:4px;"></div>
       </div>
     `,
     footerHtml: `
@@ -354,20 +200,19 @@ function openManualAttModal() {
   });
 
   openModal('modal-manual-att');
-
   let selectedStudent = null;
 
-  _acInstance = createAutocomplete({
+  createAutocomplete({
     inputEl:    modal.querySelector('#manual-att-search'),
     listEl:     modal.querySelector('#manual-att-list'),
     items:      absent,
-    renderItem: s => `<span class="student-name">${s.name}</span>&nbsp;<span class="tag-id" style="font-size:.72rem;">${s.tagId}</span>`,
+    renderItem: s => `<span class="student-name">${s.name}</span>&nbsp;<span class="tag-id" style="font-size:.72rem;">${s.uid}</span>`,
     onSelect:   s => {
       selectedStudent = s;
       const sel = modal.querySelector('#manual-att-selected');
       sel.style.display = 'block';
       modal.querySelector('#manual-att-name').textContent = s.name;
-      modal.querySelector('#manual-att-tag').innerHTML = `<span class="tag-id">${s.tagId}</span>`;
+      modal.querySelector('#manual-att-tag').innerHTML    = `<span class="tag-id">${s.uid}</span>`;
       modal.querySelector('#btn-confirm-manual').disabled = false;
     },
   });
@@ -377,13 +222,14 @@ function openManualAttModal() {
     const btn = modal.querySelector('#btn-confirm-manual');
     setButtonLoading(btn, true);
     try {
-      const record = await API.registerAttendance({ studentId: selectedStudent.id, slotIndex });
+      // Usa registerAttendanceManual com uid (alinhado ao backend)
+      const record = await API.registerAttendanceManual({ uid: selectedStudent.uid });
       const { attendances: prev } = Store.getState();
+
       Store.setState({ attendances: [...prev, record] });
       closeModal('modal-manual-att');
-      renderAttendanceTable();
-      renderStats();
-      showToast(`✓ Presença de ${selectedStudent.name} registrada (faixa ${slotIndex + 1}).`, 'success');
+      renderAll();
+      showToast(`✓ Presença de ${selectedStudent.name} registrada. Status: ${record.status}`, 'success');
     } catch (e) {
       showToast(e.message, 'error');
       setButtonLoading(btn, false);
@@ -405,15 +251,17 @@ function openAddStudentModal() {
           <span class="form-error" id="err-name" style="display:none;"></span>
         </div>
         <div class="form-group">
-          <label class="form-label">E-mail (opcional)</label>
-          <input type="email" id="new-student-email" class="form-input" placeholder="aluno@escola.edu.br" />
+          <label class="form-label">E-mail</label>
+          <input type="email" id="new-student-email" class="form-input" placeholder="aluno@email.com (opcional)" />
         </div>
         <div class="form-group">
           <label class="form-label">Tag RFID *</label>
-          <div class="tag-scanner" id="tag-scanner">
+          <div class="tag-scanner" id="tag-scanner" style="cursor:pointer;padding:15px;border:2px dashed #ccc;text-align:center;border-radius:8px;">
             <div class="tag-scanner-icon">📡</div>
-            <div class="tag-scanner-text" id="tag-scanner-text">Clique para simular leitura da tag</div>
-            <div class="tag-scanner-id" id="tag-scanner-id" style="display:none;"></div>
+            <div class="tag-scanner-text" id="tag-scanner-text">Clique para ativar o Modo Cadastro no Arduino</div>
+            <input type="text" id="new-student-uid" class="form-input"
+              placeholder="UID preenchido automaticamente ou digite manualmente…"
+              style="margin-top:10px;text-align:center;" readonly />
           </div>
           <span class="form-error" id="err-tag" style="display:none;"></span>
         </div>
@@ -422,84 +270,105 @@ function openAddStudentModal() {
     footerHtml: `
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
         <button class="btn btn-secondary btn-sm" data-close="modal-add-student">Cancelar</button>
-        <button class="btn btn-primary btn-sm" id="btn-save-student" disabled>Cadastrar aluno</button>
+        <button class="btn btn-primary btn-sm" id="btn-save-student">Cadastrar aluno</button>
       </div>
     `,
   });
 
   openModal('modal-add-student');
-  Store.setState({ pendingTagRead: null });
 
-  // Simula leitura da tag ao clicar no scanner
-  const scanner = modal.querySelector('#tag-scanner');
-  scanner.addEventListener('click', async () => {
-    if (scanner.classList.contains('scanning')) return;
-    scanner.classList.add('scanning');
-    modal.querySelector('#tag-scanner-text').textContent = 'Aguardando leitura da tag…';
+  const scanner    = modal.querySelector('#tag-scanner');
+  const txtScanner = modal.querySelector('#tag-scanner-text');
+  const inputUid   = modal.querySelector('#new-student-uid');
+
+  let wsConnection = null;
+
+  // Ao clicar na área do scanner, ativa o modo cadastro e abre o WebSocket
+  scanner.addEventListener('click', async (e) => {
+    if (e.target === inputUid) return;
+
+    txtScanner.textContent = 'Enviando comando ao Arduino…';
+    scanner.style.borderColor = '#ccc';
+
     try {
-      const { tagId } = await API.waitForNewTag();
-      scanner.classList.remove('scanning');
-      scanner.classList.add('success');
-      modal.querySelector('#tag-scanner-text').textContent = 'Tag detectada!';
-      const idEl = modal.querySelector('#tag-scanner-id');
-      idEl.textContent = tagId;
-      idEl.style.display = 'block';
-      Store.setState({ pendingTagRead: tagId });
-      modal.querySelector('#btn-save-student').disabled = false;
-    } catch (e) {
-      scanner.classList.remove('scanning');
-      modal.querySelector('#tag-scanner-text').textContent = 'Erro na leitura. Tente novamente.';
-      showToast('Falha na leitura da tag.', 'error');
+      await API.iniciarModoCadastroArduino();
+      txtScanner.textContent    = '⏳ Arduino em MODO CADASTRO — aproxime a tag do sensor…';
+      scanner.style.borderColor = 'var(--accent)';
+
+      // Abre WebSocket para receber o UID assim que o Arduino ler a tag
+      if (wsConnection) wsConnection.close();
+      wsConnection = API.connectWebSocket(({ uid }) => {
+        inputUid.value            = uid;
+        inputUid.readOnly         = false;
+        txtScanner.textContent    = `✅ Tag lida: ${uid}`;
+        scanner.style.borderColor = 'var(--green)';
+        wsConnection.close();
+        wsConnection = null;
+      });
+
+    } catch (err) {
+      txtScanner.textContent    = 'Erro ao conectar com o Arduino.';
+      scanner.style.borderColor = 'var(--red)';
+      showToast('Falha ao mudar o modo do hardware.', 'error');
     }
+  });
+
+  // Fecha o WebSocket se o modal for fechado sem salvar
+  modal.querySelector('[data-close]')?.addEventListener('click', () => {
+    wsConnection?.close();
   });
 
   modal.querySelector('#btn-save-student').addEventListener('click', async () => {
     const name  = modal.querySelector('#new-student-name').value.trim();
+    const uid   = inputUid.value.trim();
     const email = modal.querySelector('#new-student-email').value.trim();
-    const { pendingTagRead } = Store.getState();
 
-    // Limpa erros
-    modal.querySelectorAll('.form-error').forEach(e => { e.style.display = 'none'; e.textContent = ''; });
+    modal.querySelectorAll('.form-error').forEach(e => { e.style.display = 'none'; });
 
     let valid = true;
-    if (!name) {
-      showError(modal, 'err-name', 'Nome é obrigatório.'); valid = false;
-    }
-    if (!pendingTagRead) {
-      showError(modal, 'err-tag', 'Realize a leitura da tag antes de salvar.'); valid = false;
-    }
+    if (!name) { showError(modal, 'err-name', 'Nome é obrigatório.');        valid = false; }
+    if (!uid)  { showError(modal, 'err-tag',  'UID da tag é obrigatório.');   valid = false; }
     if (!valid) return;
 
     const btn = modal.querySelector('#btn-save-student');
     setButtonLoading(btn, true);
+
     try {
-      const student = await API.createStudent({ name, tagId: pendingTagRead, email });
+      const novoAluno = await API.createStudent({ uid, nome: name, email: email || undefined });
+
       const { students } = Store.getState();
-      Store.setState({ students: [...students, student], pendingTagRead: null });
+      Store.setState({ students: [...students, novoAluno] });
+
+      wsConnection?.close();
       closeModal('modal-add-student');
       renderStudentList();
       renderStats();
-      showToast(`✓ ${student.name} cadastrado com sucesso!`, 'success');
+      showToast(`✓ ${name} cadastrado com sucesso!`, 'success');
     } catch (e) {
       showToast(e.message, 'error');
+    } finally {
       setButtonLoading(btn, false);
     }
   });
 }
+
+// ── Helpers ───────────────────────────────────────────────────
 
 function showError(modal, id, msg) {
   const el = modal.querySelector(`#${id}`);
   if (el) { el.textContent = msg; el.style.display = 'block'; }
 }
 
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
 // ── Layout HTML ───────────────────────────────────────────────
 
 function buildLayout() {
   return `
-    <!-- Topbar slot -->
     <div class="main-content">
-
-      <!-- Stats Row -->
       <div class="stats-row">
         <div class="stat-card accent">
           <div class="stat-value" id="stat-total">—</div>
@@ -507,67 +376,54 @@ function buildLayout() {
         </div>
         <div class="stat-card green">
           <div class="stat-value" id="stat-present">—</div>
-          <div class="stat-label">Presentes hoje</div>
+          <div class="stat-label">Presentes / Atrasados</div>
         </div>
         <div class="stat-card red">
           <div class="stat-value" id="stat-absent">—</div>
-          <div class="stat-label">Ausentes hoje</div>
+          <div class="stat-label">Total Ausentes</div>
         </div>
         <div class="stat-card yellow">
           <div class="stat-value" id="stat-slot-att">—</div>
-          <div class="stat-label">Nesta faixa</div>
+          <div class="stat-label">Total de Leituras</div>
         </div>
       </div>
 
-      <!-- Slot Timeline -->
       <div class="card">
         <div class="section-header" style="margin-bottom:16px;">
           <div>
-            <div class="section-title">Timeline de Faixas</div>
-            <div class="section-sub">4 faixas de 25 segundos por sessão</div>
+            <div class="section-title">Status do Sistema Dinâmico</div>
+            <div class="section-sub">Atrasos calculados em blocos de 25 segundos (Máx: 4 faltas)</div>
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary btn-sm" id="btn-refresh">↻ Atualizar</button>
-            <button class="btn btn-secondary btn-sm" id="btn-reset-session">⟳ Reiniciar</button>
-            <button class="btn btn-primary btn-sm" id="btn-start-session">▶ Iniciar sessão</button>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh">↻ Atualizar Grade</button>
           </div>
-        </div>
-        <div class="slot-timeline" id="slot-timeline">
-          ${[1,2,3,4].map(i => `
-            <div class="slot-card upcoming">
-              <div class="slot-num">Faixa ${i}</div>
-              <div class="slot-label">${String(i).padStart(2,'0')}</div>
-              <div class="slot-status">Aguardando início</div>
-            </div>`).join('')}
         </div>
       </div>
 
-      <!-- Tabs: Presenças / Alunos -->
       <div class="card" style="padding:0;">
         <div style="padding:20px 24px 0;">
           <div class="tabs">
-            <button class="tab-btn active" data-tab="tab-attendance">📋 Presenças</button>
-            <button class="tab-btn" data-tab="tab-students">👥 Alunos</button>
+            <button class="tab-btn active" data-tab="tab-attendance">📋 Grade de Chamada</button>
+            <button class="tab-btn"        data-tab="tab-students">👥 Lista de Alunos</button>
           </div>
         </div>
 
-        <!-- Tab Presenças -->
         <div class="tab-panel active" id="tab-attendance" style="padding:0 24px 24px;">
           <div class="section-header" style="margin-bottom:16px;">
             <div>
-              <div class="section-title">Registro de Presenças</div>
-              <div class="section-sub" id="today-date"></div>
+              <div class="section-title">Acompanhamento em Tempo Real</div>
+              <div class="section-sub">Aproximação recomendada: 8cm a 12cm do sensor</div>
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-manual-att">+ Presença manual</button>
+            <button class="btn btn-primary btn-sm" id="btn-manual-att">+ Inserir Presença Manual</button>
           </div>
           <div class="attendance-table-wrap">
             <table class="attendance-table">
               <thead>
                 <tr>
                   <th>Aluno</th>
-                  <th>Tag ID</th>
-                  <th>Faixas (1–4)</th>
-                  <th>Total</th>
+                  <th>UID da Tag</th>
+                  <th>Presenças computadas (Máx 4)</th>
+                  <th>Status Final</th>
                 </tr>
               </thead>
               <tbody id="att-tbody">
@@ -577,30 +433,23 @@ function buildLayout() {
           </div>
         </div>
 
-        <!-- Tab Alunos -->
         <div class="tab-panel" id="tab-students" style="padding:0 24px 24px;">
           <div class="section-header" style="margin-bottom:16px;">
             <div>
-              <div class="section-title">Alunos Cadastrados</div>
+              <div class="section-title">Alunos Cadastrados no Banco</div>
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-add-student">+ Cadastrar aluno</button>
+            <button class="btn btn-primary btn-sm" id="btn-add-student">+ Cadastrar Novo Aluno</button>
           </div>
           <div class="attendance-table-wrap">
             <table class="attendance-table">
               <thead>
-                <tr><th>Nome</th><th>Tag ID</th><th style="width:60px;"></th></tr>
+                <tr><th>Nome</th><th>UID Cadastrado</th><th style="width:60px;"></th></tr>
               </thead>
               <tbody id="student-list-body"></tbody>
             </table>
           </div>
         </div>
       </div>
-
-    </div><!-- /main-content -->
+    </div>
   `;
-}
-
-function setEl(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
 }
