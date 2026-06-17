@@ -1,9 +1,12 @@
 import * as API from '../api/api.js';
 import Store from '../store/store.js';
-import { showToast, openModal, closeModal, createModal, setButtonLoading, createAutocomplete, initTabs, confirmAction } from '../components/components.js';
+import {
+  showToast, openModal, closeModal, createModal,
+  setButtonLoading, createAutocomplete, initTabs, confirmAction
+} from '../components/components.js';
 import { formatTime, formatDate } from '../utils/utils.js';
 
-let _tickInterval   = null;
+let _tickInterval = null;
 
 // ── Entry point ───────────────────────────────────────────────
 
@@ -22,10 +25,9 @@ export async function initProfessorView() {
 async function loadData() {
   Store.setState({ isLoading: true });
   try {
-    // Carrega os alunos e as presenças diretamente das novas rotas do back-end
     const [students, attendances] = await Promise.all([
-      API.getStudents(),     // Deve mapear para GET /alunos (ou rota equivalente no seu api.js)
-      API.getAttendances(),   // Mapeia para GET /presencas
+      API.getStudents(),
+      API.getAttendances(),
     ]);
     Store.setState({ students, attendances });
   } catch (e) {
@@ -35,7 +37,7 @@ async function loadData() {
   }
 }
 
-// ── Tick engine (Atualiza a tela a cada 1 segundo) ────────────
+// ── Tick engine ───────────────────────────────────────────────
 
 function startTick() {
   stopTick();
@@ -59,16 +61,15 @@ function renderAll() {
 
 function renderStats() {
   const { students, attendances } = Store.getState();
-  
-  const totalAlunos = students.length;
-  // No novo back-end, quem tem 4 faltas seguidas é considerado ausente na totalidade das faixas
-  const presentesHoje = new Set(attendances.filter(a => a.faltas < 4).map(a => a.uid)).size;
-  const ausentesHoje = totalAlunos - presentesHoje;
 
-  setEl('stat-total', totalAlunos);
-  setEl('stat-present', presentesHoje);
-  setEl('stat-absent', ausentesHoje);
-  setEl('stat-slot-att', `${attendances.length}`); // Total de registros efetuados
+  const totalAlunos   = students.length;
+  const presentesHoje = new Set(attendances.filter(a => a.faltas < 4).map(a => a.uid)).size;
+  const ausentesHoje  = totalAlunos - presentesHoje;
+
+  setEl('stat-total',    totalAlunos);
+  setEl('stat-present',  presentesHoje);
+  setEl('stat-absent',   ausentesHoje);
+  setEl('stat-slot-att', attendances.length);
 }
 
 function renderAttendanceTable() {
@@ -81,33 +82,31 @@ function renderAttendanceTable() {
     return;
   }
 
-  // Gera as linhas cruzando Alunos x Presenças baseado no 'uid'
   tbody.innerHTML = students.map(student => {
-    // Busca a presença do aluno se houver
     const presenca = attendances.find(a => a.uid === student.uid);
-    
-    let statusHtml = '';
+
+    let statusHtml    = '';
     let fatiasPresenca = '';
 
     if (presenca) {
       const corStatus = presenca.status === 'PRESENTE' ? 'var(--green)' : 'var(--yellow)';
-      statusHtml = `<span class="badge" style="background:${corStatus}; color:#fff; padding:2px 6px; borderRadius:4px;">${presenca.status}</span>`;
-      
-      // O back-end calcula faltas de 0 a 4 (onde 0 faltas = 4 presenças, 1 falta = 3 presenças...)
+      statusHtml = `<span class="badge" style="background:${corStatus};color:#fff;padding:2px 6px;border-radius:4px;">${presenca.status}</span>`;
+
       const presencasRestantes = 4 - presenca.faltas;
       fatiasPresenca = `
         ${'<span class="chip present" data-tip="Presente">✓</span>'.repeat(presencasRestantes)}
-        ${'<span class="chip absent" data-tip="Falta">✕</span>'.repeat(presenca.faltas)}
+        ${'<span class="chip absent"  data-tip="Falta">✕</span>'.repeat(presenca.faltas)}
       `;
     } else {
-      statusHtml = `<span class="badge" style="background:var(--red); color:#fff; padding:2px 6px; borderRadius:4px;">AUSENTE</span>`;
+      statusHtml     = `<span class="badge" style="background:var(--red);color:#fff;padding:2px 6px;border-radius:4px;">AUSENTE</span>`;
       fatiasPresenca = '<span class="chip future" data-tip="Sem registros">—</span>'.repeat(4);
     }
 
     return `
       <tr>
         <td><span class="student-name">${student.name}</span></td>
-        <td><span class="tag-id">${student.uid}</span></td> <td><div class="slot-chips">${fatiasPresenca}</div></td>
+        <td><span class="tag-id">${student.uid}</span></td>
+        <td><div class="slot-chips">${fatiasPresenca}</div></td>
         <td>${statusHtml}</td>
       </tr>`;
   }).join('');
@@ -126,10 +125,9 @@ function renderStudentList() {
   list.innerHTML = students.map(s => `
     <tr>
       <td><span class="student-name">${s.name}</span></td>
-      <td><span class="tag-id">${s.uid}</span></td> <td>
-        <button class="btn btn-danger btn-sm" data-delete="${s.id}" title="Remover aluno">
-          🗑
-        </button>
+      <td><span class="tag-id">${s.uid}</span></td>
+      <td>
+        <button class="btn btn-danger btn-sm" data-delete="${s.id}" title="Remover aluno">🗑</button>
       </td>
     </tr>
   `).join('');
@@ -144,7 +142,7 @@ function renderStudentList() {
 function bindActions() {
   document.getElementById('btn-manual-att')?.addEventListener('click', openManualAttModal);
   document.getElementById('btn-add-student')?.addEventListener('click', openAddStudentModal);
-  
+
   document.getElementById('btn-refresh')?.addEventListener('click', async () => {
     await loadData();
     renderAll();
@@ -154,12 +152,12 @@ function bindActions() {
 
 async function handleDeleteStudent(studentId) {
   const { students } = Store.getState();
-  const s = students.find(x => x.id === studentId);
+  const s  = students.find(x => x.id == studentId);
   const ok = await confirmAction(`Remover <b>${s?.name}</b>?`);
   if (!ok) return;
   try {
-    await API.deleteStudent(studentId); // Certifique-se de que sua API trata essa rota
-    Store.setState({ students: students.filter(x => x.id !== studentId) });
+    await API.deleteStudent(studentId);
+    Store.setState({ students: students.filter(x => x.id != studentId) });
     renderStudentList();
     renderStats();
     showToast('Aluno removido.', 'success');
@@ -172,8 +170,8 @@ async function handleDeleteStudent(studentId) {
 
 function openManualAttModal() {
   const { students, attendances } = Store.getState();
-  
-  // Filtra estudantes que ainda não possuem nenhuma presença registrada hoje
+
+  // Apenas alunos sem presença registrada hoje
   const absent = students.filter(s => !attendances.some(a => a.uid === s.uid));
 
   const modal = createModal({
@@ -190,7 +188,7 @@ function openManualAttModal() {
       <div id="manual-att-selected" style="display:none;margin-top:16px;" class="card card-sm">
         <div style="font-size:.78rem;color:var(--text-muted);">Aluno selecionado</div>
         <div id="manual-att-name" style="font-weight:600;margin-top:4px;"></div>
-        <div id="manual-att-tag" style="margin-top:4px;"></div>
+        <div id="manual-att-tag"  style="margin-top:4px;"></div>
       </div>
     `,
     footerHtml: `
@@ -205,16 +203,16 @@ function openManualAttModal() {
   let selectedStudent = null;
 
   createAutocomplete({
-    inputEl:  modal.querySelector('#manual-att-search'),
-    listEl:   modal.querySelector('#manual-att-list'),
-    items:    absent,
+    inputEl:    modal.querySelector('#manual-att-search'),
+    listEl:     modal.querySelector('#manual-att-list'),
+    items:      absent,
     renderItem: s => `<span class="student-name">${s.name}</span>&nbsp;<span class="tag-id" style="font-size:.72rem;">${s.uid}</span>`,
-    onSelect: s => {
+    onSelect:   s => {
       selectedStudent = s;
       const sel = modal.querySelector('#manual-att-selected');
       sel.style.display = 'block';
       modal.querySelector('#manual-att-name').textContent = s.name;
-      modal.querySelector('#manual-att-tag').innerHTML = `<span class="tag-id">${s.uid}</span>`;
+      modal.querySelector('#manual-att-tag').innerHTML    = `<span class="tag-id">${s.uid}</span>`;
       modal.querySelector('#btn-confirm-manual').disabled = false;
     },
   });
@@ -224,10 +222,10 @@ function openManualAttModal() {
     const btn = modal.querySelector('#btn-confirm-manual');
     setButtonLoading(btn, true);
     try {
-      // Chama a rota POST /presenca passando o { uid } esperado pelo backend
-      const record = await API.registerAttendance({ uid: selectedStudent.uid });
+      // Usa registerAttendanceManual com uid (alinhado ao backend)
+      const record = await API.registerAttendanceManual({ uid: selectedStudent.uid });
       const { attendances: prev } = Store.getState();
-      
+
       Store.setState({ attendances: [...prev, record] });
       closeModal('modal-manual-att');
       renderAll();
@@ -253,11 +251,17 @@ function openAddStudentModal() {
           <span class="form-error" id="err-name" style="display:none;"></span>
         </div>
         <div class="form-group">
-          <label class="form-label">Tag RFID (Coloque o Arduino em Modo Cadastro) *</label>
-          <div class="tag-scanner" id="tag-scanner" style="cursor:pointer; padding:15px; border:2px dashed #ccc; text-align:center;">
+          <label class="form-label">E-mail</label>
+          <input type="email" id="new-student-email" class="form-input" placeholder="aluno@email.com (opcional)" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tag RFID *</label>
+          <div class="tag-scanner" id="tag-scanner" style="cursor:pointer;padding:15px;border:2px dashed #ccc;text-align:center;border-radius:8px;">
             <div class="tag-scanner-icon">📡</div>
             <div class="tag-scanner-text" id="tag-scanner-text">Clique para ativar o Modo Cadastro no Arduino</div>
-            <input type="text" id="new-student-uid" class="form-input" placeholder="Ou digite o UID manualmente..." style="margin-top:10px; text-align:center;" />
+            <input type="text" id="new-student-uid" class="form-input"
+              placeholder="UID preenchido automaticamente ou digite manualmente…"
+              style="margin-top:10px;text-align:center;" readonly />
           </div>
           <span class="form-error" id="err-tag" style="display:none;"></span>
         </div>
@@ -273,45 +277,69 @@ function openAddStudentModal() {
 
   openModal('modal-add-student');
 
-  const scanner = modal.querySelector('#tag-scanner');
+  const scanner    = modal.querySelector('#tag-scanner');
   const txtScanner = modal.querySelector('#tag-scanner-text');
-  const inputUid = modal.querySelector('#new-student-uid');
+  const inputUid   = modal.querySelector('#new-student-uid');
 
-  // Ao clicar na área do scanner, ativa a rota POST /cadastro/iniciar do backend
+  let wsConnection = null;
+
+  // Ao clicar na área do scanner, ativa o modo cadastro e abre o WebSocket
   scanner.addEventListener('click', async (e) => {
-    if(e.target === inputUid) return; // Se clicou no input, não reinicia o comando
-    
-    txtScanner.textContent = 'Enviando comando de cadastro ao Arduino...';
+    if (e.target === inputUid) return;
+
+    txtScanner.textContent = 'Enviando comando ao Arduino…';
+    scanner.style.borderColor = '#ccc';
+
     try {
-      await API.startHardwareRegistration(); // Deve disparar POST /cadastro/iniciar
-      txtScanner.textContent = 'Arduino em MODO CADASTRO! Aproxime a tag do sensor e digite o ID retornado abaixo.';
+      await API.iniciarModoCadastroArduino();
+      txtScanner.textContent    = '⏳ Arduino em MODO CADASTRO — aproxime a tag do sensor…';
       scanner.style.borderColor = 'var(--accent)';
-    } catch (e) {
-      txtScanner.textContent = 'Erro ao conectar com o Arduino.';
+
+      // Abre WebSocket para receber o UID assim que o Arduino ler a tag
+      if (wsConnection) wsConnection.close();
+      wsConnection = API.connectWebSocket(({ uid }) => {
+        inputUid.value            = uid;
+        inputUid.readOnly         = false;
+        txtScanner.textContent    = `✅ Tag lida: ${uid}`;
+        scanner.style.borderColor = 'var(--green)';
+        wsConnection.close();
+        wsConnection = null;
+      });
+
+    } catch (err) {
+      txtScanner.textContent    = 'Erro ao conectar com o Arduino.';
+      scanner.style.borderColor = 'var(--red)';
       showToast('Falha ao mudar o modo do hardware.', 'error');
     }
   });
 
+  // Fecha o WebSocket se o modal for fechado sem salvar
+  modal.querySelector('[data-close]')?.addEventListener('click', () => {
+    wsConnection?.close();
+  });
+
   modal.querySelector('#btn-save-student').addEventListener('click', async () => {
-    const name = modal.querySelector('#new-student-name').value.trim();
-    const uid = inputUid.value.trim();
+    const name  = modal.querySelector('#new-student-name').value.trim();
+    const uid   = inputUid.value.trim();
+    const email = modal.querySelector('#new-student-email').value.trim();
 
     modal.querySelectorAll('.form-error').forEach(e => { e.style.display = 'none'; });
 
     let valid = true;
-    if (!name) { showError(modal, 'err-name', 'Nome é obrigatório.'); valid = false; }
-    if (!uid) { showError(modal, 'err-tag', 'O campo UID da Tag é obrigatório.'); valid = false; }
+    if (!name) { showError(modal, 'err-name', 'Nome é obrigatório.');        valid = false; }
+    if (!uid)  { showError(modal, 'err-tag',  'UID da tag é obrigatório.');   valid = false; }
     if (!valid) return;
 
     const btn = modal.querySelector('#btn-save-student');
     setButtonLoading(btn, true);
+
     try {
-      // Envia os dados estruturados idênticos ao POST /cadastro/salvar do backend
-      await API.createStudent({ uid, nome: name });
-      
+      const novoAluno = await API.createStudent({ uid, nome: name, email: email || undefined });
+
       const { students } = Store.getState();
-      Store.setState({ students: [...students, { uid, name }] });
-      
+      Store.setState({ students: [...students, novoAluno] });
+
+      wsConnection?.close();
       closeModal('modal-add-student');
       renderStudentList();
       renderStats();
@@ -323,6 +351,8 @@ function openAddStudentModal() {
     }
   });
 }
+
+// ── Helpers ───────────────────────────────────────────────────
 
 function showError(modal, id, msg) {
   const el = modal.querySelector(`#${id}`);
@@ -374,7 +404,7 @@ function buildLayout() {
         <div style="padding:20px 24px 0;">
           <div class="tabs">
             <button class="tab-btn active" data-tab="tab-attendance">📋 Grade de Chamada</button>
-            <button class="tab-btn" data-tab="tab-students">👥 Lista de Alunos</button>
+            <button class="tab-btn"        data-tab="tab-students">👥 Lista de Alunos</button>
           </div>
         </div>
 
