@@ -4,7 +4,7 @@
 // Para produção: trocar BASE_URL e remover _mockDb.
 // ============================================================
 
-const BASE_URL = 'http://localhost:3000'; // trocar para URL real do backend
+const BASE_URL = 'http://10.1.24.27:3000'; // trocar para URL real do backend
 
 // ── Mock in-memory (substitui chamadas HTTP durante dev) ────
 
