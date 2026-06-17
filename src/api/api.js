@@ -4,7 +4,7 @@
 // Para produção: trocar BASE_URL e remover _mockDb.
 // ============================================================
 
-const BASE_URL = 'http://localhost:3000'; // trocar para URL real do Flask
+const BASE_URL = 'http://localhost:3000'; // trocar para URL real do backend
 
 // ── Mock in-memory (substitui chamadas HTTP durante dev) ────
 
@@ -195,4 +195,33 @@ export async function waitForNewTag() {
   let tag = '';
   for (let i = 0; i < 8; i++) tag += chars[Math.floor(Math.random() * chars.length)];
   return { tagId: tag };
+}
+
+// ── Comunicação Real com Arduino (Modo Cadastro) ──────────────
+
+export async function iniciarModoCadastroArduino() {
+  const response = await fetch(`${BASE_URL}/cadastro/iniciar`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || 'Erro ao ativar o modo cadastro no hardware.');
+  }
+
+  return response.json();
+}
+
+export async function getCadastroStatus() {
+  const response = await fetch(`${BASE_URL}/cadastro/status`);
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || 'Erro ao checar o status da tag.');
+  }
+
+  return response.json();
 }
