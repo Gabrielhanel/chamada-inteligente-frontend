@@ -61,10 +61,28 @@ export async function createStudent({ name, tagId, email }) {
   const db = await _loadMock();
 
   // Validações
-  if (db.students.find(s => s.tagId === tagId)) {
+  if (!name || !name.trim()) {
+    throw new Error('Nome é obrigatório.');
+  }
+
+  if (!tagId || !tagId.trim()) {
+    throw new Error('Nenhuma tag RFID foi lida.');
+  }
+
+  if (
+    db.students.find(
+      s => s.tagId.toUpperCase() === tagId.trim().toUpperCase()
+    )
+  ) {
     throw new Error(`Tag ${tagId} já está cadastrada para outro aluno.`);
   }
-  if (email && db.students.find(s => s.email === email)) {
+
+  if (
+    email &&
+    db.students.find(
+      s => s.email?.toLowerCase() === email.toLowerCase()
+    )
+  ) {
     throw new Error(`E-mail ${email} já cadastrado.`);
   }
 
@@ -77,6 +95,7 @@ export async function createStudent({ name, tagId, email }) {
 
   db.students.push(newStudent);
   _saveMock(db);
+
   return newStudent;
 }
 
