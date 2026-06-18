@@ -340,7 +340,11 @@ function openAddStudentModal() {
     setButtonLoading(btn, true);
 
     try {
-      const novoAluno = await API.createStudent({ uid, nome: name, email: email || undefined });
+      const novoAluno = await API.createStudent({
+    name,
+    tagId: uid,
+    email: email || undefined
+});
 
       const { students } = Store.getState();
       Store.setState({ students: [...students, novoAluno] });
