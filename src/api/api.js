@@ -51,52 +51,41 @@ export async function login(email, password) {
 // ── Students ──────────────────────────────────────────────────
 
 export async function getStudents() {
-  await _delay();
-  const db = await _loadMock();
-  return [...db.students];
+
+  const response = await fetch(`${BASE_URL}/alunos`);
+
+  if (!response.ok) {
+    throw new Error("Erro ao carregar alunos");
+  }
+
+  return await response.json();
 }
 
-export async function createStudent({ name, tagId, email }) {
-  await _delay();
-  const db = await _loadMock();
+export async function createStudent({ uid, nome, email }) {
 
-  // Validações
-  if (!name || !name.trim()) {
-    throw new Error('Nome é obrigatório.');
+  const response = await fetch(`${BASE_URL}/cadastro/salvar`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      uid,
+      nome
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.erro || "Erro ao cadastrar aluno");
   }
 
-  if (!tagId || !tagId.trim()) {
-    throw new Error('Nenhuma tag RFID foi lida.');
-  }
-
-  if (
-    db.students.find(
-      s => s.tagId.toUpperCase() === tagId.trim().toUpperCase()
-    )
-  ) {
-    throw new Error(`Tag ${tagId} já está cadastrada para outro aluno.`);
-  }
-
-  if (
-    email &&
-    db.students.find(
-      s => s.email?.toLowerCase() === email.toLowerCase()
-    )
-  ) {
-    throw new Error(`E-mail ${email} já cadastrado.`);
-  }
-
-  const newStudent = {
-    id: _generateId('s'),
-    name: name.trim(),
-    tagId: tagId.trim().toUpperCase(),
-    email: email?.trim() || '',
+  return {
+    id: Date.now(),
+    uid,
+    nome,
+    email: email || ""
   };
-
-  db.students.push(newStudent);
-  _saveMock(db);
-
-  return newStudent;
 }
 
 export async function deleteStudent(studentId) {
@@ -110,11 +99,15 @@ export async function deleteStudent(studentId) {
 // ── Attendances ───────────────────────────────────────────────
 
 // data: 'YYYY-MM-DD' (padrão: hoje)
-export async function getAttendances(date) {
-  await _delay();
-  const db = await _loadMock();
-  const target = date || new Date().toISOString().split('T')[0];
-  return db.attendances.filter(a => a.date === target);
+export async function getAttendances() {
+
+  const response = await fetch(`${BASE_URL}/presencas`);
+
+  if (!response.ok) {
+    throw new Error("Erro ao carregar presenças");
+  }
+
+  return await response.json();
 }
 
 export async function registerAttendance({ studentId, slotIndex, method = 'manual' }) {
