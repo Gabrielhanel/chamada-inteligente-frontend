@@ -3,8 +3,7 @@ let timerInterval = null;
 let listaAlunosCache = []; 
 let loopVerificacao = null;
 
-// --- FUNÇÕES DE CONTROLE DE AULA ---
-
+// --- FUNÇÕES DE AULA E TIMER ---
 function gerenciarTimerVisual(tempoInicial) {
     if (timerInterval) clearInterval(timerInterval);
     const display = document.getElementById("timer-regressivo");
@@ -33,7 +32,7 @@ function gerenciarTimerVisual(tempoInicial) {
             statusBloco.innerText = "Bloco 2: +1 Falta";
             statusBloco.style.color = "var(--yellow)";
             barra.style.backgroundColor = "var(--yellow)";
-        } else if (segundosDecorridos < 75) {
+        } else if (segundosDecorridos < 74) {
             statusBloco.innerText = "Bloco 3: +2 Faltas";
             statusBloco.style.color = "var(--orange)";
             barra.style.backgroundColor = "var(--orange)";
@@ -50,13 +49,13 @@ async function iniciarAula() {
         const res = await fetch(`${API_URL}/aula/iniciar`, { method: 'POST' });
         document.getElementById('aula-status').innerHTML = `✅ Aula Iniciada!`;
         gerenciarTimerVisual(Date.now());
+        carregarPresencas();
     } catch (e) {
-        document.getElementById('aula-status').innerHTML = `❌ Erro na API`;
+        document.getElementById('aula-status').innerHTML = `❌ Erro na conexão`;
     }
 }
 
 // --- FUNÇÕES DE CADASTRO ---
-
 function restaurarBotoesCadastro() {
     const btn = document.getElementById('btn-capturar');
     const btnCancelar = document.getElementById('btn-cancelar');
@@ -66,26 +65,13 @@ function restaurarBotoesCadastro() {
     btnCancelar.style.display = "none";
 }
 
-async function cancelarCaptura() {
-    if (loopVerificacao) clearInterval(loopVerificacao);
-    try { await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' }); } catch (e) {}
-    document.getElementById('cadastro-feedback').innerText = "🚫 Modo cadastro cancelado.";
-    restaurarBotoesCadastro();
-}
-
 async function capturarNovaTag() {
     const feedback = document.getElementById('cadastro-feedback');
-    const btn = document.getElementById('btn-capturar');
-    const btnCancelar = document.getElementById('btn-cancelar');
     document.getElementById('uid-input').value = ""; 
-
     try {
-        await fetch(`${API_URL}/cadastro/iniciar`, { method: 'POST' }); 
-        btn.disabled = true;
-        btn.innerText = "⏳ Aguardando leitura...";
-        btnCancelar.style.display = "block";
-        feedback.innerText = "📡 Aproxime a tag no leitor...";
-
+        await fetch(`${API_URL}/cadastro/iniciar`, { method: 'POST' });
+        feedback.innerText = "📡 Sensor Pronto! Aproxime a tag...";
+        
         if (loopVerificacao) clearInterval(loopVerificacao);
         loopVerificacao = setInterval(async () => {
             const res = await fetch(`${API_URL}/cadastro/status`);
@@ -96,7 +82,7 @@ async function capturarNovaTag() {
                 feedback.innerText = "✅ Tag capturada!";
                 restaurarBotoesCadastro();
             }
-        }, 1000);
+        }, 1500);
     } catch (e) { feedback.innerText = "❌ Erro ao ativar sensor"; }
 }
 
@@ -109,24 +95,28 @@ async function salvarAluno() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid, nome })
     });
-    document.getElementById('nome-input').value = "";
     carregarAlunos();
 }
 
-// --- FUNÇÕES DE DADOS (TEMPO REAL) ---
-
+// --- DADOS E TABELAS (TEMPO REAL) ---
 async function carregarAlunos() {
-    const res = await fetch(`${API_URL}/alunos`);
-    listaAlunosCache = await res.json();
-    const tbody = document.getElementById('tabela-alunos');
-    tbody.innerHTML = listaAlunosCache.map(a => `<tr><td>${a.id}</td><td><span class="tag-id">${a.uid}</span></td><td class="student-name">${a.nome}</td></tr>`).join('');
+    try {
+        const res = await fetch(`${API_URL}/alunos`);
+        listaAlunosCache = await res.json();
+    } catch (e) { console.error("Erro ao carregar alunos"); }
 }
 
 async function carregarPresencas() {
     try {
+        // Adicionamos ?t=${Date.now()} para evitar cache e garantir tempo real
         const res = await fetch(`${API_URL}/presencas?t=${Date.now()}`);
         const presencas = await res.json();
-        const tbody = document.getElementById("tabela-presencas");
+        const tbody = document.getElementById('tabela-presencas');
+        
+        if (!presencas || presencas.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Nenhuma leitura registrada hoje.</td></tr>`;
+            return;
+        }
 
         tbody.innerHTML = presencas.map(p => {
             const aluno = listaAlunosCache.find(a => a.uid === p.uid);
@@ -135,16 +125,18 @@ async function carregarPresencas() {
             
             return `<tr>
                 <td>${p.id}</td>
-                <td>${p.uid}</td>
-                <td><b>${nomeExibicao}</b></td>
+                <td><span class="tag-id">${p.uid}</span></td>
+                <td class="student-name"><b>${nomeExibicao}</b></td>
                 <td><span class="badge ${badgeClass}">${p.status}</span></td>
                 <td>${p.faltas} bloco(s)</td>
             </tr>`;
         }).join('');
-    } catch (e) { console.error("Erro ao atualizar presenças"); }
+    } catch (e) { console.error("Erro no polling de presenças:", e); }
 }
 
-window.onload = () => {
-    carregarAlunos();
-    setInterval(carregarPresencas, 2000); // Polling de 2s para tempo real
+window.onload = async () => {
+    await carregarAlunos();
+    carregarPresencas();
+    // Atualiza a tabela a cada 2 segundos
+    setInterval(carregarPresencas, 2000);
 };
