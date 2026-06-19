@@ -3,6 +3,8 @@ let timerInterval = null;
 let listaAlunosCache = []; 
 let loopVerificacao = null;
 
+// --- FUNÇÕES DE CONTROLE DE AULA ---
+
 function gerenciarTimerVisual(tempoInicial) {
     if (timerInterval) clearInterval(timerInterval);
     const display = document.getElementById("timer-regressivo");
@@ -31,7 +33,7 @@ function gerenciarTimerVisual(tempoInicial) {
             statusBloco.innerText = "Bloco 2: +1 Falta";
             statusBloco.style.color = "var(--yellow)";
             barra.style.backgroundColor = "var(--yellow)";
-        } else if (segundosDecorridos < 74) {
+        } else if (segundosDecorridos < 75) {
             statusBloco.innerText = "Bloco 3: +2 Faltas";
             statusBloco.style.color = "var(--orange)";
             barra.style.backgroundColor = "var(--orange)";
@@ -48,11 +50,12 @@ async function iniciarAula() {
         const res = await fetch(`${API_URL}/aula/iniciar`, { method: 'POST' });
         document.getElementById('aula-status').innerHTML = `✅ Aula Iniciada!`;
         gerenciarTimerVisual(Date.now());
-        carregarPresencas();
     } catch (e) {
-        document.getElementById('aula-status').innerHTML = `❌ Erro ao conectar com a API`;
+        document.getElementById('aula-status').innerHTML = `❌ Erro na API`;
     }
 }
+
+// --- FUNÇÕES DE CADASTRO ---
 
 function restaurarBotoesCadastro() {
     const btn = document.getElementById('btn-capturar');
@@ -65,17 +68,8 @@ function restaurarBotoesCadastro() {
 
 async function cancelarCaptura() {
     if (loopVerificacao) clearInterval(loopVerificacao);
-    
-    try {
-        await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' });
-    } catch (e) {
-        console.error("Erro ao cancelar rota:", e);
-    }
-
-    const feedback = document.getElementById('cadastro-feedback');
-    feedback.className = "text-danger";
-    feedback.innerText = "🚫 Modo cadastro cancelado.";
-    
+    try { await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' }); } catch (e) {}
+    document.getElementById('cadastro-feedback').innerText = "🚫 Modo cadastro cancelado.";
     restaurarBotoesCadastro();
 }
 
@@ -83,153 +77,74 @@ async function capturarNovaTag() {
     const feedback = document.getElementById('cadastro-feedback');
     const btn = document.getElementById('btn-capturar');
     const btnCancelar = document.getElementById('btn-cancelar');
-    
     document.getElementById('uid-input').value = ""; 
 
     try {
-        feedback.className = "text-muted";
-        feedback.innerText = "📡 Acionando Arduino...";
         await fetch(`${API_URL}/cadastro/iniciar`, { method: 'POST' }); 
-        
-        feedback.innerText = "📡 Sensor Pronto! Aproxime a tag no leitor...";
-        
-        // Configura botões UI
         btn.disabled = true;
         btn.innerText = "⏳ Aguardando leitura...";
-        btn.style.background = "#475569";
-        btnCancelar.style.display = "block"; // Mostra o cancelar
-
-        let tentativas = 0; 
-        const maxTentativas = 15; 
+        btnCancelar.style.display = "block";
+        feedback.innerText = "📡 Aproxime a tag no leitor...";
 
         if (loopVerificacao) clearInterval(loopVerificacao);
-
         loopVerificacao = setInterval(async () => {
-            tentativas++;
-            try {
-                const res = await fetch(`${API_URL}/cadastro/status`);
-                const data = await res.json();
-                
-                if (data.uid) {
-                    clearInterval(loopVerificacao);
-                    document.getElementById('uid-input').value = data.uid;
-                    
-                    const jaExiste = listaAlunosCache.some(aluno => aluno.uid.toUpperCase() === data.uid.toUpperCase());
-                    
-                    if (jaExiste || data.status === "NEGADO") {
-                        feedback.className = "text-danger";
-                        feedback.innerText = "❌ Negado: Esta tag já está cadastrada!";
-                    } else {
-                        feedback.className = "text-muted";
-                        feedback.innerText = "✅ Tag capturada com sucesso!";
-                    }
-                    restaurarBotoesCadastro();
-                } else if (tentativas >= maxTentativas) {
-                    clearInterval(loopVerificacao);
-                    // Envia ativamente a ordem para o back-end desativar o modo de cadastro
-                    await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' });
-                    feedback.className = "text-danger";
-                    feedback.innerText = "⚠️ Tempo esgotado! Nenhuma tag detectada.";
-                    restaurarBotoesCadastro();
-                }
-            } catch (e) {
+            const res = await fetch(`${API_URL}/cadastro/status`);
+            const data = await res.json();
+            if (data.uid) {
                 clearInterval(loopVerificacao);
-                feedback.innerText = "❌ Erro ao ler resposta do sensor.";
+                document.getElementById('uid-input').value = data.uid;
+                feedback.innerText = "✅ Tag capturada!";
                 restaurarBotoesCadastro();
             }
-        }, 1500);
-
-    } catch (e) {
-        feedback.innerText = "❌ Erro ao ativar modo cadastro";
-        restaurarBotoesCadastro();
-    }
+        }, 1000);
+    } catch (e) { feedback.innerText = "❌ Erro ao ativar sensor"; }
 }
 
 async function salvarAluno() {
-    const feedback = document.getElementById('cadastro-feedback');
     const uid = document.getElementById('uid-input').value;
     const nome = document.getElementById('nome-input').value.trim();
-    
-    if (!uid || !nome) {
-        feedback.innerText = "⚠️ Preencha o nome e capture a Tag primeiro!";
-        return;
-    }
-
-    try {
-        await fetch(`${API_URL}/cadastro/salvar`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid, nome })
-        });
-        
-        feedback.className = "text-muted";
-        feedback.innerText = "💾 Salvo com sucesso!";
-        document.getElementById('uid-input').value = "";
-        document.getElementById('nome-input').value = "";
-        await carregarAlunos();
-    } catch (e) {
-        feedback.className = "text-danger";
-        feedback.innerText = "❌ Erro ao salvar aluno";
-    }
+    if (!uid || !nome) return;
+    await fetch(`${API_URL}/cadastro/salvar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, nome })
+    });
+    document.getElementById('nome-input').value = "";
+    carregarAlunos();
 }
 
+// --- FUNÇÕES DE DADOS (TEMPO REAL) ---
+
 async function carregarAlunos() {
-    try {
-        const res = await fetch(`${API_URL}/alunos`);
-        listaAlunosCache = await res.json();
-        const tbody = document.getElementById('tabela-alunos');
-        
-        if (!listaAlunosCache.length) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">Nenhum aluno cadastrado.</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = listaAlunosCache.map(a => `<tr><td>${a.id}</td><td><span class="tag-id">${a.uid}</span></td><td class="student-name">${a.nome}</td></tr>`).join('');
-    } catch (e) {
-        document.getElementById('tabela-alunos').innerHTML = `<tr><td colspan="3" style="color:var(--red);">Erro ao buscar alunos.</td></tr>`;
-    }
+    const res = await fetch(`${API_URL}/alunos`);
+    listaAlunosCache = await res.json();
+    const tbody = document.getElementById('tabela-alunos');
+    tbody.innerHTML = listaAlunosCache.map(a => `<tr><td>${a.id}</td><td><span class="tag-id">${a.uid}</span></td><td class="student-name">${a.nome}</td></tr>`).join('');
 }
 
 async function carregarPresencas() {
     try {
         const res = await fetch(`${API_URL}/presencas?t=${Date.now()}`);
         const presencas = await res.json();
-        const tbody = document.getElementById('tabela-presencas');
-        
-        if (!presencas.length) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Nenhuma leitura registrada hoje.</td></tr>`;
-            return;
-        }
+        const tbody = document.getElementById("tabela-presencas");
 
         tbody.innerHTML = presencas.map(p => {
-            let badgeClass = 'badge-atrasado';
-            if (p.status === 'PRESENTE') badgeClass = 'badge-presente';
-            else if (p.status === 'AUSENTE' || p.status === 'SAIU') badgeClass = 'badge-ausente';
-
-            const totalFaltas = p.faltas !== undefined && p.faltas !== null ? p.faltas : 0;
-            const classeFalta = totalFaltas === 0 ? 'coluna-faltas zero-faltas' : 'coluna-faltas';
-
-            let nomeAluno = p.nome || "Não Identificado";
-            if (nomeAluno === "Não Identificado" && listaAlunosCache.length > 0) {
-                const alunoEncontrado = listaAlunosCache.find(a => a.uid === p.uid);
-                if (alunoEncontrado) nomeAluno = alunoEncontrado.nome;
-            }
-
-            return `
-                <tr>
-                    <td>${p.id}</td>
-                    <td><span class="tag-id">${p.uid}</span></td>
-                    <td class="student-name"><b>${nomeAluno}</b></td>
-                    <td><span class="badge ${badgeClass}">${p.status}</span></td>
-                    <td class="${classeFalta}">${totalFaltas} bloco(s) de falta</td>
-                </tr>`;
+            const aluno = listaAlunosCache.find(a => a.uid === p.uid);
+            const nomeExibicao = aluno ? aluno.nome : "Visitante";
+            const badgeClass = p.status === 'PRESENTE' ? 'badge-presente' : 'badge-atrasado';
+            
+            return `<tr>
+                <td>${p.id}</td>
+                <td>${p.uid}</td>
+                <td><b>${nomeExibicao}</b></td>
+                <td><span class="badge ${badgeClass}">${p.status}</span></td>
+                <td>${p.faltas} bloco(s)</td>
+            </tr>`;
         }).join('');
-    } catch (e) {
-        console.error("Erro no polling de presenças:", e);
-    }
+    } catch (e) { console.error("Erro ao atualizar presenças"); }
 }
 
-window.onload = async () => {
-    await carregarAlunos();
-    carregarPresencas();
-    setInterval(carregarPresencas, 3000);
+window.onload = () => {
+    carregarAlunos();
+    setInterval(carregarPresencas, 2000); // Polling de 2s para tempo real
 };
