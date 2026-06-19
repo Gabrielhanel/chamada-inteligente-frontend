@@ -2,6 +2,7 @@ const API_URL = "http://192.168.0.111:3000";
 let timerInterval = null;
 let listaAlunosCache = []; 
 let loopVerificacao = null;
+let presencasInterval = null; // Controle limpo do loop de presenças
 
 function gerenciarTimerVisual(tempoInicial) {
     if (timerInterval) clearInterval(timerInterval);
@@ -45,10 +46,10 @@ function gerenciarTimerVisual(tempoInicial) {
 
 async function iniciarAula() {
     try {
-        const res = await fetch(`${API_URL}/aula/iniciar`, { method: 'POST' });
+        await fetch(`${API_URL}/aula/iniciar`, { method: 'POST' });
         document.getElementById('aula-status').innerHTML = `✅ Aula Iniciada!`;
         gerenciarTimerVisual(Date.now());
-        carregarPresencas();
+        await carregarPresencas(); // Força a atualização da tabela no exato segundo que inicia
     } catch (e) {
         document.getElementById('aula-status').innerHTML = `❌ Erro ao conectar com a API`;
     }
@@ -65,17 +66,14 @@ function restaurarBotoesCadastro() {
 
 async function cancelarCaptura() {
     if (loopVerificacao) clearInterval(loopVerificacao);
-    
     try {
         await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' });
     } catch (e) {
         console.error("Erro ao cancelar rota:", e);
     }
-
     const feedback = document.getElementById('cadastro-feedback');
     feedback.className = "text-danger";
     feedback.innerText = "🚫 Modo cadastro cancelado.";
-    
     restaurarBotoesCadastro();
 }
 
@@ -93,11 +91,10 @@ async function capturarNovaTag() {
         
         feedback.innerText = "📡 Sensor Pronto! Aproxime a tag no leitor...";
         
-        // Configura botões UI
         btn.disabled = true;
         btn.innerText = "⏳ Aguardando leitura...";
         btn.style.background = "#475569";
-        btnCancelar.style.display = "block"; // Mostra o cancelar
+        btnCancelar.style.display = "block"; 
 
         let tentativas = 0; 
         const maxTentativas = 15; 
@@ -126,7 +123,6 @@ async function capturarNovaTag() {
                     restaurarBotoesCadastro();
                 } else if (tentativas >= maxTentativas) {
                     clearInterval(loopVerificacao);
-                    // Envia ativamente a ordem para o back-end desativar o modo de cadastro
                     await fetch(`${API_URL}/cadastro/cancelar`, { method: 'POST' });
                     feedback.className = "text-danger";
                     feedback.innerText = "⚠️ Tempo esgotado! Nenhuma tag detectada.";
@@ -189,13 +185,16 @@ async function carregarAlunos() {
     }
 }
 
+// =============== AQUI ESTAVA O PROBLEMA ===============
+// Esta agora é a ÚNICA função carregarPresencas.
+// O "?t=" impede que o navegador esconda os dados atualizados com o cache.
 async function carregarPresencas() {
     try {
         const res = await fetch(`${API_URL}/presencas?t=${Date.now()}`);
         const presencas = await res.json();
         const tbody = document.getElementById('tabela-presencas');
         
-        if (!presencas.length) {
+        if (!presencas || presencas.length === 0) {
             tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">Nenhuma leitura registrada hoje.</td></tr>`;
             return;
         }
@@ -228,36 +227,11 @@ async function carregarPresencas() {
     }
 }
 
-// Função para atualizar a tabela de "Leituras no Sensor"
-async function carregarPresencas() {
-    try {
-        const response = await fetch("http://192.168.0.111:3000/presencas");
-        const presencas = await response.json();
-
-        const tabela = document.getElementById("tabela-presencas");
-        tabela.innerHTML = ""; // Limpa a tabela atual
-
-        presencas.forEach(p => {
-            tabela.innerHTML += `
-                <tr>
-                    <td>${p.id}</td>
-                    <td>${p.uid}</td>
-                    <td>${p.nome || "Visitante"}</td>
-                    <td>${p.status}</td>
-                    <td>${p.faltas}</td>
-                </tr>
-            `;
-        });
-    } catch (error) {
-        console.error("Erro ao atualizar presenças:", error);
-    }
-}
-
-// Atualiza a cada 2 segundos para dar sensação de "Tempo Real"
-setInterval(carregarPresencas, 2000);
-
 window.onload = async () => {
     await carregarAlunos();
-    carregarPresencas();
-    setInterval(carregarPresencas, 3000);
+    await carregarPresencas();
+    
+    // Garante que só vai existir 1 loop rodando a cada 2 segundos
+    if (presencasInterval) clearInterval(presencasInterval);
+    presencasInterval = setInterval(carregarPresencas, 2000);
 };
