@@ -1,4 +1,4 @@
-const API_URL = "http://192.168.0.111:3000";
+const API_URL = "http://10.1.24.27:3000";
 let timerInterval = null;
 let listaAlunosCache = []; 
 let loopVerificacao = null;
